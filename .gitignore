@@ -1,0 +1,16 @@
+/target
+/classes
+**/.DS_Store
+pom.xml
+pom.xml.asc
+*.jar
+*.class
+/.lein-*
+/.nrepl-port
+*.log
+profiles.clj
+.rebel_readline_history
+resources/solr/**/data/index
+resources/solr/**/data/snapshot_metadata
+resources/solr/**/data/tlog
+*env-vars
