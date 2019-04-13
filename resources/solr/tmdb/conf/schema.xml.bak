@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<schema name="tmdb" version="1.6">
+    <field name="_version_" type="plong" indexed="true" stored="true"/>
+    <field name="db_id" type="string" indexed="true" stored="true" required="true" multiValued="false" />
+    <field name="_text_" type="text_general" multiValued="true" indexed="true" stored="false"/>
+
+        <field name="title" type="text_general" indexed="true" stored="true" />
+    <field name="original_title" type="string" indexed="true" stored="true" />
+    <field name="homepage" type="string" indexed="true" stored="true"/>
+    <field name="original_language" type="string" indexed="true" stored="true"/>
+    <field name="tagline" type="string" indexed="true" stored="true"/>
+    <field name="status" type="string" indexed="true" stored="true"/>
+
+    <field name="overview" type="text_general" indexed="true" stored="true" />
+    <field name="genres" type="text_lowcased" indexed="true" stored="true" multiValued="true"/>
+    <field name="keywords" type="strings" indexed="true" stored="true"/>
+    <field name="spoken_languages" type="text_lowcased" indexed="true" stored="true"  multiValued="true"/>
+    <field name="production_companies" type="text_lowcased" indexed="true" stored="true"  multiValued="true"/>
+    <field name="production_countries" type="text_lowcased" indexed="true" stored="true"  multiValued="true"/>
+
+    <field name="release_date" type="pdate" indexed="true" stored="true"/>
+    <field name="budget" type="plong" indexed="true" stored="true"/>
+    <field name="revenue" type="plong" indexed="true" stored="true"/>
+
+    <field name="runtime" type="pfloat" indexed="true" stored="true"/>
+    <field name="popularity" type="pfloat" indexed="true" stored="true"/>
+    <field name="vote_average" type="pfloat" indexed="true" stored="true"/>
+
+    <uniqueKey>db_id</uniqueKey>
+
+    <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true"/>
+    <fieldType name="booleans" class="solr.BoolField" sortMissingLast="true" multiValued="true"/>
+    <fieldType name="pdate" class="solr.DatePointField" docValues="true"/>
+    <fieldType name="pdates" class="solr.DatePointField" docValues="true" multiValued="true"/>
+    <fieldType name="pdouble" class="solr.DoublePointField" docValues="true"/>
+    <fieldType name="pdoubles" class="solr.DoublePointField" docValues="true" multiValued="true"/>
+    <fieldType name="pfloat" class="solr.FloatPointField" docValues="true"/>
+    <fieldType name="pfloats" class="solr.FloatPointField" docValues="true" multiValued="true"/>
+    <fieldType name="pint" class="solr.IntPointField" docValues="true"/>
+    <fieldType name="pints" class="solr.IntPointField" docValues="true" multiValued="true"/>
+    <fieldType name="plong" class="solr.LongPointField" docValues="true"/>
+    <fieldType name="plongs" class="solr.LongPointField" docValues="true" multiValued="true"/>
+    <fieldType name="string" class="solr.StrField" sortMissingLast="true" docValues="true"/>
+    <fieldType name="strings" class="solr.StrField" sortMissingLast="true" docValues="true" multiValued="true"/>
+
+
+    <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100">
+        <analyzer type="index">
+            <tokenizer class="solr.StandardTokenizerFactory"/>
+            <filter class="solr.LowerCaseFilterFactory"/>
+            <filter class="solr.PorterStemFilterFactory"/>
+        </analyzer>
+        <analyzer type="query">
+            <tokenizer class="solr.StandardTokenizerFactory"/>
+            <filter class="solr.LowerCaseFilterFactory"/>
+        </analyzer>
+    </fieldType>
+
+    <fieldType name="text_lowcased" class="solr.TextField" positionIncrementGap="100">
+        <analyzer type="index">
+            <tokenizer class="solr.KeywordTokenizerFactory"/>
+            <filter class="solr.LowerCaseFilterFactory"/>
+        </analyzer>
+        <analyzer type="query">
+            <tokenizer class="solr.KeywordTokenizerFactory"/>
+            <filter class="solr.LowerCaseFilterFactory"/>
+        </analyzer>
+    </fieldType>
+
+</schema>
+
