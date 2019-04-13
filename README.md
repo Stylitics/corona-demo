@@ -18,6 +18,12 @@ https://github.com/originrose/cortex#gpu-compute-install-instructions
 
 Soon. 
 
+## Datasets
+
+The datasets located in `resources/solr/tmdb/data/csv/` come from these sources:
+* TMDB https://www.kaggle.com/tmdb/tmdb-movie-metadata/metadata
+* GroupLens / MovieLens https://grouplens.org/datasets/movielens/
+
 ## Contributors
 
 - ...
