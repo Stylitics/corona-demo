@@ -91,6 +91,20 @@
 
 
 
+;;; 5. Index documents (movies)
+
+(defn core-index-all!
+  []
+  (println "SOLR: Clearing all index")
+  (println (solr.client/clear-index! client-config {:commit true}))
+  (println "SOLR: Indexing all documents")
+  (println (solr.client/add! client-config data/movies {:commit true}))
+  (println "SOLR: Documents uploaded and available at"
+           "http://localhost:8983/solr/tmdb/query?q=*:*&fl=db_id,title,overview,genres,cast")
+  )
+
+#_(core-index-all!)
+
 
 
 
