@@ -19,4 +19,5 @@
   :resource-paths ["resources" "target"]
   :source-paths ["src/clj" "src/cljc"]
   :clean-targets ^{:protect false} ["target"]
+  :profiles {:uberjar {:aot :all}}
   :main corona-demo.core)

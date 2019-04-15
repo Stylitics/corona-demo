@@ -5,9 +5,13 @@
 
 ;;; Movies
 
-(def tmdb-csv-path (str (System/getProperty "user.dir") "/resources/solr/tmdb/data/csv/"))
+(def data-dir (str (System/getProperty "user.dir") "/resources/solr/tmdb/data/"))
+(def csv-dir (str data-dir "csv/"))
 
-(def movies-file "tmdb_5000_movies.csv")
+(def movies-file  "tmdb_5000_movies.csv")
+(def credits-file "tmdb_5000_credits.csv")
+(def ratings-file "ratings.csv")
+(def users-file   "users.csv")
 
 (def movies-fields-val-fns
   {:genres (utils/mapv-json-vals "name")
@@ -18,15 +22,12 @@
 
 (def movies*
   (utils/read-csv
-   (str tmdb-csv-path movies-file)
+   (str csv-dir movies-file)
    {:key-fn keyword :val-fns movies-fields-val-fns}))
-
-
-(def credits-file "tmdb_5000_credits.csv")
 
 (def credits-raw-maps
   (utils/read-csv
-   (str tmdb-csv-path credits-file)
+   (str csv-dir credits-file)
    {:key-fn keyword}))
 
 (defn parse-credit-raw-map
@@ -44,6 +45,30 @@
 (defonce credits (map parse-credit-raw-map credits-raw-maps))
 
 (defonce movies (utils/merge-by :db_id movies* credits))
+
+
+(defn read-ratings
+  []
+  (utils/read-csv
+   (str csv-dir ratings-file)
+   {:key-fn keyword
+    :val-fns {:userId  (fn [id] (Long/parseLong id))
+              :movieId (fn [id] (Long/parseLong id))
+              :rating  (fn [f]  (Float/parseFloat f))}}))
+
+(defn read-users
+  "Parse user records from 'users-csv-resource-name' resource (.csv format)"
+  []
+  (let [parse-num (fn [v] (Float/parseFloat v))
+        db-fields [:userId :gender :age :occupation :zip]
+        users-fields-fns {:userId (fn [id] (Long/parseLong id))
+                          :gender (fn [g] (case g "F" 0.0 "M" 1.0))
+                          :age (fn [v] (when-not (= v "1") (Float/parseFloat v)))
+                          :occupation (fn [v] (Float/parseFloat v))}
+        entries (utils/read-csv (str csv-dir users-file) {:key-fn keyword :val-fns users-fields-fns})]
+    (filter :age entries)))
+
+
 
 
 

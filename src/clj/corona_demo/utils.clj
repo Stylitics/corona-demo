@@ -55,3 +55,10 @@
                                concat))
        vals
        (map first)))
+
+
+(defn read-file
+  [filename]
+  (-> filename
+      slurp
+      read-string))
