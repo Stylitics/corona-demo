@@ -26,7 +26,9 @@ The datasets located in `resources/solr/tmdb/data/csv/` come from these sources:
 
 ## Contributors
 
-- ...
+- Leon Talbot
+- Alexey Makurin
+- Arthur Caillau
 
 ## License
 
