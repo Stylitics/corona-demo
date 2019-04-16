@@ -5,8 +5,7 @@
    [corona.ltr :as ltr]
    [corona-demo.data :as data]
    [corona-demo.utils :as utils]
-   [think.datatype.core :as dtype]
-   [corona-demo.data :as data]))
+   [think.datatype.core :as dtype]))
 
 
 #_(first (data/read-users))

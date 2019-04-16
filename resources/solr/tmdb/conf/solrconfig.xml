@@ -35,7 +35,7 @@
        that you fully re-index after changing this setting as it can
        affect both how text is indexed and queried.
   -->
-  <luceneMatchVersion>7.6.0</luceneMatchVersion>
+  <luceneMatchVersion>8.0.0</luceneMatchVersion>
 
   <!-- <lib/> directives can be used to instruct Solr to load any Jars
        identified and use them to resolve any "plugins" specified in
@@ -87,7 +87,7 @@
   <lib dir="${solr.install.dir:../../../..}/dist/" regex="solr-ltr-\d.*\.jar" />
 
   <!-- CLOJURE CORONALIB -->
-  <lib path="${solr.install.dir:../../../..}/../.m2/repository/corona/corona/0.1.0-snapshot/corona-0.1.0-snapshot.jar"/>
+  <lib path="${solr.install.dir:../../../..}/../.m2/repository/corona/corona/0.1.0-snapshot/corona-0.1.1-SNAPSHOT.jar"/>
 
   <!-- Data Directory
 

@@ -6,7 +6,8 @@
    [corona-demo.ml.cortex :as cortex]
    [corona-demo.ml.mxnet  :as mxnet]
    [corona-demo.utils     :as utils]
-   [corona.client         :as solr.client]
+   [corona.core-admin     :as solr.core]
+   [corona.index          :as solr.index]
    [corona.ltr            :as solr.ltr]
    [corona.query          :as solr.query]
    [corona.schema         :as solr.schema]))
@@ -44,11 +45,11 @@
   []
   (println "SOLR: Deleting :tmdb core...")
   ;; same as $SOLR_HOME/bin/solr delete -c tmdb
-  (solr.client/delete-core! client-config {:delete-index? true})
+  (solr.core/delete! client-config {:delete-index? true})
 
   (println "SOLR: Creating back :tmdb core...")
   ;; same as $SOLR_HOME/bin/solr create -c tmdb -d conf-dir
-  (solr.client/create-core! client-config {:instance-dir core-dir})
+  (solr.core/create! client-config {:instance-dir core-dir})
 
   (println "SOLR: Ready to add and index documents :-)"))
 
@@ -115,9 +116,9 @@
 (defn core-index-all!
   []
   (println "SOLR: Clearing all index")
-  (println (solr.client/clear-index! client-config {:commit true}))
+  (println (solr.index/clear! client-config {:commit true}))
   (println "SOLR: Indexing all documents")
-  (println (solr.client/add! client-config data/movies {:commit true}))
+  (println (solr.index/add! client-config data/movies {:commit true}))
   (println "SOLR: Documents uploaded and available at"
            "http://localhost:8983/solr/tmdb/query?q=*:*&fl=db_id,title,overview,genres,cast")
   )
@@ -154,7 +155,7 @@
 
 (defn query-simple
   [settings]
-  (solr.client/query
+  (solr.query/query
    client-config
    (merge default-query-settings settings)))
 
@@ -208,7 +209,7 @@
 
 (defn query-mlt-simple
   [settings]
-  (solr.client/query-mlt
+  (solr.query/query-mlt
    client-config
    (merge default-mlt-settings settings)))
 
@@ -245,7 +246,7 @@
 
 (defn query-mlt-custom
   [settings]
-  (solr.client/query-mlt-tv-edismax
+  (solr.query/query-mlt-tv-edismax
    client-config
    (merge default-mlt-settings settings)))
 
@@ -477,4 +478,4 @@
 
 (defn -main
   []
-  (println "running collage-demo.core/-main"))
+  (println "running corona-demo.core/-main"))
