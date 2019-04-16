@@ -4,8 +4,8 @@
                  [org.clojure/data.csv "0.1.4"]
                  [org.clojure/data.json "0.2.6"]
 
-                 ;; SOLR: 7.6.0:
-                 [corona "0.1.1-SNAPSHOT"]
+                 ;; SOLR: 8.0.0:
+                 [corona "0.1.2-SNAPSHOT"]
 
                  ;; CORTEX
                  [thinktopic/cortex "0.9.22"]

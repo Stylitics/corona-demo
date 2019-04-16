@@ -45,11 +45,11 @@
   []
   (println "SOLR: Deleting :tmdb core...")
   ;; same as $SOLR_HOME/bin/solr delete -c tmdb
-  (solr.core/delete! client-config {:delete-index? true})
+  (solr.core/delete! client-config {:deleteIndex true})
 
   (println "SOLR: Creating back :tmdb core...")
   ;; same as $SOLR_HOME/bin/solr create -c tmdb -d conf-dir
-  (solr.core/create! client-config {:instance-dir core-dir})
+  (solr.core/create! client-config {:instanceDir core-dir})
 
   (println "SOLR: Ready to add and index documents :-)"))
 
@@ -203,7 +203,7 @@
    ;; Response: fields to retrieve
    :fl ["db_id" "title" "overview" "release_date" "budget" "keywords" "score"]
    ;; !rerank\!ltr query. in this case - rerank that uses external rqq query for similar docs reranking
-   ;; :rq "{!ltr model=ltrGoaModel reRankDocs=100 efi.gender=1 efi.age=20 efi.occupation=1}"
+   ;; :rq "{!ltr model=ltrGoaModel reRankDocs=50 efi.gender=1 efi.age=20 efi.occupation=1}"
    })
 
 
@@ -298,7 +298,7 @@
     {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
      :now (inst-ms (:release_date bond-spectre-movie))
      :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"]
-     :rq "{!ltr model=ltrGoaModel reRankDocs=100 efi.gender=1 efi.age=20 efi.occupation=1}"}))
+     :rq "{!ltr model=ltrGoaModel reRankDocs=50 efi.gender=1 efi.age=20 efi.occupation=1}"}))
 
 
 ;;; Now let's try with other user profile.
