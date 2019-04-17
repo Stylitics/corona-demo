@@ -1,6 +1,7 @@
 (ns corona-demo.core
   (:gen-class)
   (:require
+   [clojure.string        :as string]
    [corona-demo.data      :as data]
    [corona-demo.ml.core   :as ml]
    [corona-demo.ml.cortex :as cortex]
@@ -39,7 +40,7 @@
 
 (def core-dir      (str (System/getProperty "user.dir") "/resources/solr/tmdb"))
 (def data-dir      (str core-dir "/data/"))
-(def client-config {:type :http :core :tmdb})
+(def client-config {:core :tmdb})
 
 (defn core-reset!
   []
@@ -57,7 +58,7 @@
 
 
 
-
+#_(first data/movies)
 
 ;;; 3. Add Solr Schema Types
 
@@ -73,11 +74,10 @@
   (println "SOLR: adding schema types")
   (solr.schema/add-field-type! client-config custom-schema))
 
+
 ;; if you just pulled this demo, all field types are already in manageschema
 ;; thus, and no action is required.
 #_(add-schema-types!)
-
-
 
 
 
@@ -105,7 +105,10 @@
 ;; thus, and no action is required.
 #_(add-schema-fields! [{}])
 #_(replace-schema-fields! schema-fields)
-
+#_(doseq [n (map :name data/content-fields)]
+    (solr.schema/update-field!
+     client-config
+     {:add-copy-field {:source n :dest "_text_"}}))
 
 
 
@@ -136,33 +139,38 @@
 (defn get-fields [fields docs] (mapv (apply juxt fields) docs))
 (defn return-fields [fields resp] (->> resp return-docs (get-fields fields)))
 
-(def default-query-settings
-  {:defType "edismax"
-   ;; main query
-   :q "*:*"
-   ;; Boosts: Content fields
-   :qf [["genres" 10] ["overview" 6] ["title" 5] ["tagline" 1] ["keywords" 1]]
-   ;; Boosts: Number fields
-   :bf ["recip(ms(NOW/HOUR,release_date),3.16e-11,0.08,0.05)^50"
-        "if(gt(popularity,50),1,0)^10"]
-   ;; Response: fields to be returned
-   :fl ["db_id" "genres" "keywords" "title" "overview" "release_date" "budget" "score"]
-   ;; Response: number of results returned
-   :rows 30
-   ;; Rerank
-   ;; :rq "{!ltr model=ltrGoaModel reRankDocs=100 efi.gender=1 efi.age=20 efi.occupation=1}"
-   })
-
-(defn query-simple
-  [settings]
-  (solr.query/query
+;; Get me bond movies
+#_(solr.query/query
    client-config
-   (merge default-query-settings settings)))
+   {:q "bond"
+    :fl ["db_id" "title" "score"]   ; Results: Fields 
+    :rows 10})
 
-;; Search for a Bond Movie
-#_(return-fields
-   [:db_id :title :score]
-   (query-simple {:q "Bond"}))
+;; with Daniel Craigh
+#_(solr.query/query
+   client-config
+   {:q "bond cast:Daniel Craig"
+    :fl ["db_id" "title" "score"]   ; Results: Fields 
+    :rows 10})
+
+;; from last 20 years
+#_(solr.query/query
+   client-config
+   {:defType "lucene"
+    :q "bond"
+    :fq "release_date:[NOW-20YEARS TO NOW]"
+    :fl ["db_id" "title" "release_date"]   ; Results: Fields
+    :rows 10})
+
+;; prefer more recent
+#_(solr.query/query
+   client-config
+   {:defType "edismax"
+    :q "(overview:bond)"
+    :bf ["recip(ms(NOW,release_date),3.16e-11,0.5,0.8)^10"]
+    :fl ["db_id" "title" "release_date"]   ; Results: Fields
+    :rows 10})
+
 
 
 
@@ -186,25 +194,16 @@
                    :keywords ["assassin" "amnesia" "flashback"]})
 
 (def default-mlt-settings
-  {;; main query to select template document:
-   :q "db_id:*"
-   ;; Where to extract interesting terms for similarity?
-   :mlt.fl (mapv :name data/content-fields)
-   ;; Minimum Term Frequency below which terms will be ignored
-   :mlt.mintf "1"
-   ;; Minimum Document Frequency below which terms will be ignored
-   :mlt.mindf "3"
-   ;; Should we boost extracted interesting terms base on their tf-idf score?
-   :mlt.boost "true"
-   ;; Boost interesting terms per field:
-   :mlt.qf [["genres" 10] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
-   ;; Response: assoc interesting-terms used
-   :mlt.interestingTerms "details"
-   ;; Response: fields to retrieve
-   :fl ["db_id" "title" "overview" "release_date" "budget" "keywords" "score"]
-   ;; !rerank\!ltr query. in this case - rerank that uses external rqq query for similar docs reranking
-   ;; :rq "{!ltr model=ltrGoaModel reRankDocs=50 efi.gender=1 efi.age=20 efi.occupation=1}"
-   })
+  {:q "db_id:206647" ;“this” matched by id
+   :mlt.fl ["overview" "genres" "title" "keywords" ;interesting-terms from
+            "production_companies" "production_countries"
+            "spoken_languages" "director"]
+   :mlt.mintf "1" ;min Term Frequency below which terms are ignored
+   :mlt.mindf "3" ;min Document Frequency below which terms are ignored
+   :mlt.minwl "3" ;min Word Length
+   :mlt.boost "true" ;interesting terms tf-idf score as boost
+   :mlt.qf [["genres" 10] ["overview" 6] ["title" 3] ["keywords" 1]] ;boost
+   :fl ["db_id" "title" "release_date" "score"]})
 
 
 (defn query-mlt-simple
@@ -221,7 +220,8 @@
 ;; How does it work? It builds query from interestingTerms.
 ;; Let's find out what they are: ([<field> <value> <score>])
 #_(solr.query/mlt-resp->terms
-   (query-mlt-simple {:q (str "db_id:" (:db_id bond-spectre-movie))}))
+   (query-mlt-simple {:q (str "db_id:" (:db_id bond-spectre-movie))
+                      :mlt.interestingTerms "details"}))
 
 ;; Can we boost by non-content fields like release_date?
 
@@ -229,10 +229,10 @@
    [:title :score :release_date]
    (query-mlt-simple {:q (str "db_id:" (:db_id bond-spectre-movie))
                       :now (inst-ms (:release_date bond-spectre-movie))
-                      :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^30"]}))
+                      :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^30"
+                           "if(gt(popularity,50),1,0)^10"]}))
 
 ;; hmm no, we get the exact same results.
-
 
 
 
@@ -244,22 +244,117 @@
 ;; For this We have a special handler called query-mlt-tv-edismax
 ;; tv stands for termVectors.
 
+
+(defonce ratings (data/read-ratings))
+
+(defn prefered-recent-movies-query
+  [user-id]
+  (->> ratings
+       (filter #(= (:userId %) user-id))
+       (filter #(> (:rating %) 4.0))
+       (map (fn [r] (update r :timestamp #(Integer. %))))
+       (sort-by :timestamp >)
+       (take 5)
+       (mapv :movieId)))
+
+#_(prefered-recent-movies-query 23)
+
+(solr.query/query
+ client-config
+ {:q "db_id:1222"#_(format "db_id:%s" (string/join " OR db_id:" (prefered-recent-movies-query 23)))
+  :fl ["db_id" "title" "overview" "score"]})
+
+(defn custom-interesting-terms
+  [actual-movie-id user-id mlt-fl]
+  (let [pref-ids (prefered-recent-movies-query user-id)
+        pref-ids-str (string/join " db_id:" pref-ids)]
+    (solr.query/query-term-vectors
+     client-config
+     {:q (format "db_id:%s db_id:%s" actual-movie-id pref-ids-str)
+      :mlt.minwl "3"
+      :fl mlt-fl})))
+
+(solr.query/term-vectors-resp->interesting-terms-per-field
+ (custom-interesting-terms
+  (:db_id bond-spectre-movie)
+  23
+  ["genres" "overview" "keywords"])
+ [["genres" 10]])
+
+(solr.query/query client-config {:q "{!mlt qf=title^100 qf=author=^50}db_id:"})
+
+
+(defn tv-terms->q
+  [tv-terms & [q]]
+  (let [tv-terms-str (solr.query/terms-per-field->q tv-terms)]
+    (format "(%s) (%s)" tv-terms-str q)))
+
+(defn query-mlt-tv-edismax
+  "Like more like this handler query or `query-mlt` but
+
+  - takes top-k terms *PER FIELD*, for more explanations, see
+    https://github.com/DiceTechJobs/RelevancyFeedback#isnt-this-just-the-mlt-handler
+
+  - allows edismax params (e.g. `:boost` `:bf` `:bq` `:qf`)
+    NOTE: To better understand boosting methods, see
+    https://nolanlawson.com/2012/06/02/comparing-boost-methods-in-solr/
+
+  Special settings:
+
+  :mlt.q <string>
+  To reach the matching document to get interesting terms.
+
+  Supported mlt keys: :mlt-fl, :mlt-qf
+
+  IMPORTANT: All mlt.fl fields MUST be set as TermVectors=true in the managedschema
+  for the mlt query to be integrated to main q.
+  "
+  [client-config {:keys [fq] :as settings}]
+  (let [mlt-q (:mlt.q settings)
+        tv-resp (solr.query/query-term-vectors
+                 client-config
+                 {:q mlt-q
+                  :fl (:mlt.fl settings)})
+        tv-terms (solr.query/term-vectors-resp->interesting-terms-per-field
+                  tv-resp
+                  (:mlt.qf settings))
+        new-q (tv-terms->q tv-terms (:q settings))
+        new-fq (cond-> (format "-(%s)" mlt-q)
+                 fq (str " " fq))
+        settings (-> settings
+                     (assoc :q new-q)
+                     (assoc :fq new-fq)
+                     (dissoc solr.query/mlt-keys)
+                     (dissoc :mlt.q))
+        resp (solr.query/query client-config (merge {:defType "edismax"}
+                                                    settings))]
+    (assoc resp :interestingTerms tv-terms :match (-> tv-resp :response))))
+
 (defn query-mlt-custom
   [settings]
-  (solr.query/query-mlt-tv-edismax
+  (query-mlt-tv-edismax
    client-config
    (merge default-mlt-settings settings)))
+
+#_(prefered-movies-query ratings 18)
+
+
 
 ;; We need to make sure our manageschema file have termVectors set to true for content fields
 ;; then use special key :mlt.q as :q is also usable for normal edismax search query
 ;; by default this is the case:
-#_(return-fields
+(return-fields
    [:title :score :release_date]
-   (query-mlt-custom
-    {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
-     :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
-     :now (inst-ms (:release_date bond-spectre-movie))
-     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"]}))
+   (let [more-like-these-q (format "db_id:(%s^10 %s^10)"
+                                   (:db_id bond-spectre-movie)
+                                   (:db_id bourne-movie))]
+     (query-mlt-custom
+      {:mlt.q more-like-these-q
+       :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
+       :fl ["title" "score" "release_date"]
+       :now (inst-ms (:release_date bond-spectre-movie))
+       :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
+            "if(gt(popularity,50),1,0)^1"]})))
 
 #_(solr.query/mlt-resp->terms
    (query-mlt-simple {:q (str "db_id:" (:db_id bond-spectre-movie))}))
@@ -274,7 +369,8 @@
   {:mlt.q (str "db_id:" (:db_id bond-never-movie))
    :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
    :now (inst-ms (:release_date bond-never-movie))
-   :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2.5"]}))
+   :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2.5"
+        "if(gt(popularity,50),1,0)^10"]}))
 
 ;; Older Bonds come up.
 
@@ -297,8 +393,9 @@
    (query-mlt-custom
     {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
      :now (inst-ms (:release_date bond-spectre-movie))
-     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"]
-     :rq "{!ltr model=ltrGoaModel reRankDocs=50 efi.gender=1 efi.age=20 efi.occupation=1}"}))
+     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
+          "if(gt(popularity,50),1,0)^10"]
+     :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=1 efi.age=20 efi.occupation=1}"}))
 
 
 ;;; Now let's try with other user profile.
@@ -308,8 +405,9 @@
  (query-mlt-custom
   {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
    :now (inst-ms (:release_date bond-spectre-movie))
-   :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"]
-   :rq "{!ltr model=ltrGoaModel reRankDocs=100 efi.gender=0 efi.age=60 efi.occupation=7}"}))
+   :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
+        "if(gt(popularity,50),1,0)^10"]
+   :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}))
 
 ;; Completely different results
 
@@ -340,7 +438,7 @@
   ;; http://localhost:8983/solr/tmdb/query?q=*:*&fl=db_id,genres,production_countries,spoken_languages,[features%20store=tmdb_features]&rows=500
 )
 
-
+;; DATASET: users
 
 
 
@@ -403,6 +501,7 @@
   (upload-train-and-test-datasets! shuffled-ds)
 
   )
+
 
 
 

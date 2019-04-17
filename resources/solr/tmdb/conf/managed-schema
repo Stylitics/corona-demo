@@ -82,4 +82,19 @@
   <field name="title" type="text_lowcased" termVectors="true" indexed="true" stored="true"/>
   <field name="vote_average" type="pfloat" indexed="true" stored="true"/>
   <field name="vote_count" type="plongs"/>
+  <copyField source="cast" dest="_text_"/>
+  <copyField source="director" dest="_text_"/>
+  <copyField source="genres" dest="_text_"/>
+  <copyField source="homepage" dest="_text_"/>
+  <copyField source="keywords" dest="_text_"/>
+  <copyField source="original_language" dest="_text_"/>
+  <copyField source="original_title" dest="_text_"/>
+  <copyField source="overview" dest="_text_"/>
+  <copyField source="producers" dest="_text_"/>
+  <copyField source="production_companies" dest="_text_"/>
+  <copyField source="production_countries" dest="_text_"/>
+  <copyField source="spoken_languages" dest="_text_"/>
+  <copyField source="status" dest="_text_"/>
+  <copyField source="tagline" dest="_text_"/>
+  <copyField source="title" dest="_text_"/>
 </schema>
