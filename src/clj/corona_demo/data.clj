@@ -11,7 +11,7 @@
 (def movies-file  "tmdb_5000_movies.csv")
 (def credits-file "tmdb_5000_credits.csv")
 (def links-file   "links.csv")
-(def ratings-file "ratings1m.csv")
+(def ratings-file "ratings.csv")
 (def users-file   "users.csv")
 
 (def movies-fields-val-fns
