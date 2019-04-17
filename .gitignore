@@ -14,3 +14,4 @@ resources/solr/**/data/index
 resources/solr/**/data/snapshot_metadata
 resources/solr/**/data/tlog
 *env-vars
+*.iml
