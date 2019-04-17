@@ -42,21 +42,6 @@
   [filename & [csv-opts]]
   (read-csv (io/resource filename) csv-opts))
 
-(defn merge-by
-  "Merges elems in seqs by joining them on return value of key-fn k.
-   Example: (merge-by :id [{:id 0 :name \"George\"}{:id 1 :name \"Bernie\"}]
-                          [{:id 2 :name \"Lara\"}{:id 0 :name \"Ben\"}])
-   => [{:id 0 :name \"Ben\"}{:id 1 :name \"Bernie\"}{:id 2 :name \"Lara\"}]"
-  [k & seqs]
-  (->> seqs
-       (map (partial group-by k))
-       (apply merge-with (comp vector
-                               (partial apply merge)
-                               concat))
-       vals
-       (map first)))
-
-
 (defn read-file
   [filename]
   (-> filename

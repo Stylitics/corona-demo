@@ -68,11 +68,11 @@
          (map (fn [{:keys [userId movieId] :as rating}]
                 (-> rating
                     (assoc :user  (first (filter #(= (:userId %) userId) users)))
-                    (assoc :movie (first (filter #(= (:db_id %) (str movieId)) mov-feats))))))
+                    (assoc :movie (first (filter #(= (:db_id %) (str movieId)) mov-feats)))))) ; #(:movie_lens_id %)
          (remove (comp nil? :user))
          (remove (comp nil? :movie))
          (map (fn [{:keys [userId rating user movie]}]
-                {:movieId  (Long/parseLong (:db_id movie))
+                {:movieId  (Long/parseLong (:db_id movie)) ;; (:movie_lens_id)
                  :userId   userId
                  :score    [rating]
                  :features (vec

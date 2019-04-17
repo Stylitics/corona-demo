@@ -10,6 +10,7 @@
 
 (def movies-file  "tmdb_5000_movies.csv")
 (def credits-file "tmdb_5000_credits.csv")
+(def links-file   "links.csv")
 (def ratings-file "ratings.csv")
 (def users-file   "users.csv")
 
@@ -24,6 +25,13 @@
   (utils/read-csv
    (str csv-dir movies-file)
    {:key-fn keyword :val-fns movies-fields-val-fns}))
+
+(defonce links
+  (utils/read-csv
+   (str csv-dir links-file)
+   {:key-fn keyword :val-fns {:movieId #(Long/parseLong %)}}))
+
+#_(take 10 links)
 
 (def credits-raw-maps
   (utils/read-csv
@@ -44,7 +52,25 @@
 
 (defonce credits (map parse-credit-raw-map credits-raw-maps))
 
-(defonce movies (utils/merge-by :db_id movies* credits))
+(defn tmdb_id->credits
+  [db_id]
+  (-> (first (filter #(= db_id (:movie_id %)) credits))
+      (dissoc :db_id)))
+
+(defn tmdb_id->movie-lens-id
+  [db_id]
+  (:movieId (first (filter #(= db_id (:tmdbId %)) links))))
+
+(defonce movies (mapv (fn [{:keys [db_id] :as m}]
+                       (-> m
+                           (assoc :movie_lens_id (tmdb_id->movie-lens-id db_id))
+                           (merge (tmdb_id->credits db_id))))
+                     movies*))
+
+#_(count movies)
+#_(first movies)
+#_(count (filter :movie_lens_id movies))
+#_(db_id->movieId "862")
 
 
 (defn read-ratings
@@ -55,6 +81,9 @@
     :val-fns {:userId  (fn [id] (Long/parseLong id))
               :movieId (fn [id] (Long/parseLong id))
               :rating  (fn [f]  (Float/parseFloat f))}}))
+
+
+#_(count (read-ratings))
 
 (defn read-users
   "Parse user records from 'users-csv-resource-name' resource (.csv format)"
@@ -69,8 +98,9 @@
     (filter :age entries)))
 
 
+#_(take 3 (read-users))
 
-
+#_(count (read-users))
 
 
 (def schema-type-text_en_splitting
