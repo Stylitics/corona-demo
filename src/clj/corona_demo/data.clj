@@ -11,7 +11,7 @@
 (def movies-file  "tmdb_5000_movies.csv")
 (def credits-file "tmdb_5000_credits.csv")
 (def links-file   "links.csv")
-(def ratings-file "ratings.csv")
+(def ratings-file "ratings1m.csv")
 (def users-file   "users.csv")
 
 (def movies-fields-val-fns
@@ -82,8 +82,20 @@
               :movieId (fn [id] (Long/parseLong id))
               :rating  (fn [f]  (Float/parseFloat f))}}))
 
+(defonce ratings (read-ratings))
 
-#_(count (read-ratings))
+#_(first ratings)
+
+(defn make-rated-movies-ids-set
+  [ratings]
+  (set (map :movieId ratings)))
+
+(def rated-movie-ids (make-rated-movies-ids-set ratings))
+
+(def rated-movies (filter #(contains? rated-movie-ids (:movie_lens_id %)) movies))
+
+#_(count rated-movies)
+
 
 (defn read-users
   "Parse user records from 'users-csv-resource-name' resource (.csv format)"
