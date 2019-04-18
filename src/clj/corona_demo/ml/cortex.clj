@@ -32,27 +32,31 @@
    :network-filestem out-filename ; provide no extension, .nippy will be appended.
    :epoch-count num-epoch))
 
+(defn compare-results [trained-net test-dataset & [num-to-take]]
+  (let [num-to-take (or num-to-take 30)]
+    (->> test-dataset
+       (remove (fn [{:keys [score]}]
+                 ;; skip mid range ratings as not so interesting
+                 (and (> (first score) 2.1) (< (first score) 5.0))))
+       (take num-to-take)
+       (map (fn [entry]
+              {:act-score (-> entry :score first)
+               :net-score (-> (run-trained-net trained-net [entry])
+                              first
+                              :score
+                              first)})))))
+
 (comment
 
   ;; A. load already trained NN from file:
   
-  (def trained-net (load-trained-net "ltr-goa-nn.nippy"))
+  (def trained-net (load-trained-net "ltr-goa-nn-.nippy"))
 
   ;; B. train NN
   (train! (:train splitted-ds) (:test splitted-ds) 1000 "ltr-goa-nn-new")
   ;; Then load newly trained model:
   (def trained-net (load-trained-net "ltr-goa-nn-new.nippy"))
 
-  ;; to see what we've got predict scoring for top 30 entries of test set (excluding entries with mid ranges)
-  (->> (-> splitted-ds :test)
-       (remove (fn [{:keys [score]}]
-                 (and (> (first score) 2.1) (< (first score) 5.0))))
-       (take 30)
-       (map (fn [entry]
-              {:act-score (-> entry :score first)
-               :net-score (-> (cortex/run-trained-net trained-net [entry])
-                              first
-                              :score
-                              first)})))
-
+  ;; to see what scores did we predict for top 30 entries of test set (excluding entries with mid ranges)
+  (compare-results trained-net (:test splitted-ds))
   )

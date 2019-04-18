@@ -44,14 +44,34 @@
   :db_id - id of movie;
   :features - vector of features values for movie."
   [client-config store-name]
+  ;; [AM] NullPointerEx
   (ltr/extract-features
    client-config
    {:q "*:*"
     :rows "10000"
     :sort "db_id asc"
-    :fl "db_id"
-    :store store-name}))
-
+    :fl "db_id,movie_lens_id"
+    :store store-name})
+  ;; [AM] This quick and dirty fix is working
+  #_(let [_ (require 'org.httpkit.client)
+        docs (->
+               @(org.httpkit.client/get
+                  "http://localhost:8983/solr/tmdb/query?q=*:*&fl=movie_lens_id,db_id,[features%20store=tmdb_features]&rows=10000"
+                  {:accept :json})
+               :body
+               (json/read-str :key-fn (fn [k] (if (= k "[features]")
+                                                :features
+                                                (keyword k))))
+               :response
+               :docs)]
+    (->> docs
+         (mapv #(update % :features
+                        (fn [features]
+                          (->> (string/split features #",")
+                               (map (fn [feat] (string/split feat #"=")))
+                               (map second)
+                               (mapv (fn [f] (Float/parseFloat f))))))))
+    ))
 
 
 
@@ -60,25 +80,28 @@
   Returns vector of maps with keys:
   :movieId, :userId, :score, :features
   where :features is vector of movie features concatenated with [user-gender user-age user-occupation]."
-  []
+  [& [num-to-drop num-to-take]]
   (let [users (data/read-users)
-        mov-feats (extract-mov-features {:type :http :core :tmdb}
-                                        "tmdb_features")]
-    (->> (data/read-ratings)
+        mov-feats (extract-mov-features {:type :http :core :tmdb} "tmdb_features")
+        ratings (data/read-ratings)
+        ratings (if num-to-drop (drop num-to-drop ratings) ratings)
+        ratings (if num-to-take (take num-to-take ratings) ratings)]
+    (->> ratings
          (map (fn [{:keys [userId movieId] :as rating}]
                 (-> rating
                     (assoc :user  (first (filter #(= (:userId %) userId) users)))
-                    (assoc :movie (first (filter #(= (:db_id %) (str movieId)) mov-feats)))))) ; #(:movie_lens_id %)
+                    (assoc :movie (first (filter #(= (first (:movie_lens_id %)) movieId) mov-feats)))))) ; #(:movie_lens_id %)
          (remove (comp nil? :user))
          (remove (comp nil? :movie))
          (map (fn [{:keys [userId rating user movie]}]
-                {:movieId  (Long/parseLong (:db_id movie)) ;; (:movie_lens_id)
+                {:movieId  (first (:movie_lens_id movie))
+                 :movieIdTMDB  (Long/parseLong (:db_id movie))
                  :userId   userId
                  :score    [rating]
                  :features (vec
-                            (concat
-                             (drop-last 3 (:features movie))
-                             [(:gender user) (:age user) (:occupation user)]))}))
+                             (concat
+                               (drop-last 3 (:features movie))
+                               [(:gender user) (:age user) (:occupation user)]))}))
          (doall))))
 
 #_(build-training-dataset)
@@ -113,7 +136,7 @@
                 ;; dumb undersampling
                 (remove (fn [{:keys [score]}] (and (= (first score) 3.0) (< (rand-int 10) 6))))
                 (remove (fn [{:keys [score]}] (and (= (first score) 4.0) (< (rand-int 10) 7))))
-                (remove (fn [{:keys [score]}] (and (= (first score) 5.0) (< (rand-int 10) 0))))
+                (remove (fn [{:keys [score]}] (and (= (first score) 5.0) (< (rand-int 10) 6)))) ;; 0 freq for 100k ratings
                 ;; dumb oversampling
                 (reduce (fn [ds entry]
                           (cond
@@ -128,6 +151,14 @@
                 vec)
      :mins mins
      :maxs maxs}))
+
+(defn split-dataset [shuffled-dataset & [ratio]]
+  (let [total-vol (count shuffled-dataset)
+        ratio (or ratio 0.8)
+        train-vol (long (* 1000 (quot (* ratio total-vol) 1000)))
+        test-vol (long (* 1000 (quot (* (- 1. ratio) total-vol) 1000)))]
+    {:train (take train-vol shuffled-dataset)
+     :test  (take test-vol (drop train-vol shuffled-dataset))}))
 
 (defn get-layers
   "Extracts layers (weights and biases) of Cortex trained network 'cortex-trained-nn' in ready-for-json form.
