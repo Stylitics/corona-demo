@@ -4,6 +4,8 @@
                  [org.clojure/data.csv "0.1.4"]
                  [org.clojure/data.json "0.2.6"]
 
+                 [incanter "1.9.3"]
+
                  ;; SOLR: 8.0.0:
                  [corona "0.1.2-SNAPSHOT"]
 
