@@ -1,5 +1,5 @@
 # corona-demo
-A search and recommendation engine demo app that uses Clojure Solr 7 ML and Movies
+A basic movie search and recommendation engine implementation that uses [Corona](https://github.com/Stylitics/corona) (a Solr 8 Clojure wrapper), ML (with Cortex, MXNet soon) and that exploits MLT (More Like This) handler and LTR (learning to rank) plugin.
 
 ## Prerequisites
 
