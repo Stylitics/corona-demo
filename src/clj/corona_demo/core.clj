@@ -179,7 +179,7 @@
 
 
 
-;;; 6.1 Run a basic MoreLikeThis query from chosen movie
+;;; 6.1 Run a basic MoreLikeThis query from chosen movie to get simlar movies
 
 (def bond-spectre-movie {:db_id        "206647"
                          :title        "Spectre"
@@ -215,16 +215,20 @@
     client-config
     (merge default-mlt-settings settings)))
 
-;; More Like Spectre Bond Movie:
+;; The query: More Like Spectre Bond Movie:
 
 #_(return-fields [:title :score :release_date]
                  (query-mlt-simple {:q (str "db_id:" (:db_id bond-spectre-movie))}))
 
+
 ;; How does it work? It builds query from interestingTerms.
+
 ;; Let's find out what they are: ([<field> <value> <score>])
+
 #_(solr.query/mlt-resp->terms
     (query-mlt-simple {:q                    (str "db_id:" (:db_id bond-spectre-movie))
                        :mlt.interestingTerms "details"}))
+
 
 ;; Can we boost by non-content fields like release_date?
 
@@ -237,16 +241,19 @@
 
 ;; hmm no, we get the exact same results.
 
+;; And we cannot append more words to generated query neither.
 
 
 
 
-;;; 6.2 Run a custom MLT handler that accepts boosting fns
+
+
+
+;;; 6.2 Run mlt query then enhance it base on user preferences and other factors
 
 ;; Let's use edismax normal query, but passing interesting terms found for Spectre. 
 ;; For this We have a special handler called query-mlt-tv-edismax
 ;; tv stands for termVectors.
-
 
 (defonce ratings (data/read-ratings))
 
@@ -262,11 +269,6 @@
 
 #_(prefered-recent-movies-query 23)
 
-(solr.query/query
-  client-config
-  {:q  "db_id:1222" #_(format "db_id:%s" (string/join " OR db_id:" (prefered-recent-movies-query 23)))
-   :fl ["db_id" "title" "overview" "score"]})
-
 (defn custom-interesting-terms
   [actual-movie-id user-id mlt-fl]
   (let [pref-ids (prefered-recent-movies-query user-id)
@@ -277,108 +279,84 @@
        :mlt.minwl "3"
        :fl        mlt-fl})))
 
-#_(solr.query/term-vectors-resp->interesting-terms-per-field
-    (custom-interesting-terms
-      (:db_id bond-spectre-movie)
-      23
-      ["genres" "overview" "keywords"])
-    [["genres" 10]])
-
-#_(solr.query/query client-config {:q "{!mlt qf=title^100 qf=author=^50}db_id:"})
-
-
-(defn tv-terms->q
-  [tv-terms & [q]]
-  (let [tv-terms-str (solr.query/terms-per-field->q tv-terms)]
-    (format "(%s) (%s)" tv-terms-str q)))
-
-(defn query-mlt-tv-edismax
-  "Like more like this handler query or `query-mlt` but
-
-  - takes top-k terms *PER FIELD*, for more explanations, see
-    https://github.com/DiceTechJobs/RelevancyFeedback#isnt-this-just-the-mlt-handler
-
-  - allows edismax params (e.g. `:boost` `:bf` `:bq` `:qf`)
-    NOTE: To better understand boosting methods, see
-    https://nolanlawson.com/2012/06/02/comparing-boost-methods-in-solr/
-
-  Special settings:
-
-  :mlt.q <string>
-  To reach the matching document to get interesting terms.
-
-  Supported mlt keys: :mlt-fl, :mlt-qf
-
-  IMPORTANT: All mlt.fl fields MUST be set as TermVectors=true in the managedschema
-  for the mlt query to be integrated to main q.
-  "
-  [client-config {:keys [fq] :as settings}]
-  (let [mlt-q (:mlt.q settings)
-        tv-resp (solr.query/query-term-vectors
-                  client-config
-                  {:q  mlt-q
-                   :fl (:mlt.fl settings)})
-        tv-terms (solr.query/term-vectors-resp->interesting-terms-per-field
-                   tv-resp
-                   (:mlt.qf settings))
-        new-q (tv-terms->q tv-terms (:q settings))
-        new-fq (cond-> (format "-(%s)" mlt-q)
-                       fq (str " " fq))
-        settings (-> settings
-                     (assoc :q new-q)
-                     (assoc :fq new-fq)
-                     (dissoc solr.query/mlt-keys)
-                     (dissoc :mlt.q))
-        resp (solr.query/query client-config (merge {:defType "edismax"}
-                                                    settings))]
-    (assoc resp :interestingTerms tv-terms :match (-> tv-resp :response))))
-
 (defn query-mlt-custom
   [settings]
-  (query-mlt-tv-edismax
-    client-config
-    (merge default-mlt-settings settings)))
-
-#_(prefered-movies-query ratings 18)
-
-
-
-;; We need to make sure our manageschema file have termVectors set to true for content fields
-;; then use special key :mlt.q as :q is also usable for normal edismax search query
-;; by default this is the case:
-(return-fields
-  [:title :score :release_date]
-  (let [more-like-these-q (format "db_id:(%s^10 %s^10)"
-                                  (:db_id bond-spectre-movie)
-                                  (:db_id bourne-movie))]
-    (query-mlt-custom
-      {:mlt.q  more-like-these-q
-       :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
-       :fl     ["title" "score" "release_date"]
-       :now    (inst-ms (:release_date bond-spectre-movie))
-       :bf     ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
-                "if(gt(popularity,50),1,0)^1"]})))
-
-#_(solr.query/mlt-resp->terms
-    (query-mlt-simple {:q (str "db_id:" (:db_id bond-spectre-movie))}))
+  (solr.query/query-mlt-tv-edismax
+   client-config
+   (merge default-mlt-settings settings)))
 
 ;; That's good, it picks up most recent Bonds as well as other similar movie.
+
+#_(return-fields
+   [:db_id :title :score :release_date]
+   (query-mlt-custom
+    {:now (inst-ms (:release_date bond-spectre-movie))
+     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date),3.16e-11,1,1)}"
+     :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
+     :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
+     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
+          "if(gt(popularity,50),1,0)^10"]}))
 
 ;; If we try with old bond:
 
 #_(return-fields
-    [:title :score :release_date]
-    (query-mlt-custom
-      {:mlt.q  (str "db_id:" (:db_id bond-never-movie))
-       :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
-       :now    (inst-ms (:release_date bond-never-movie))
-       :bf     ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2.5"
-                "if(gt(popularity,50),1,0)^10"]}))
+   [:db_id :title :score :release_date]
+   (query-mlt-custom
+    {:now (inst-ms (:release_date bond-spectre-movie))
+     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date),3.16e-11,1,1)}"
+     :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
+     :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
+     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
+          "if(gt(popularity,50),1,0)^10"]}))
 
 ;; Older Bonds come up.
 
 ;; But say you are new on the site and we don't have your movie history, etc. Can we guess what you would like?
 
+;; Let's imagine we have a User past searches,
+;; last watched movies,
+;; and wants more like Spectre Movie.
+
+(def past-search-queries ["star wars" "car" "fast car race"])
+
+(def user-last-watched-movies
+  [{:title "Furious 7", :db_id "168259"}
+   {:title "Hidden Away", :db_id "258755"}
+   {:title "Need for Speed", :db_id "136797"}])
+
+
+#_(return-fields
+ [:title :score :release_date]
+ (let [watched-ids-str (string/join " " (map :db_id user-last-watched-movies))
+       bond-release-date (inst-ms (:release_date bond-spectre-movie))
+       this-id (:db_id bond-spectre-movie)
+       mlt-q (str "{!mlt mintf=1,mindf=3,boost=true,qf=overview}" this-id)
+       watched-q (str "{!mlt mintf=1 mindf=3 qf=overview}" watched-ids-str)
+       search-logs-q (string/join " " past-search-queries)
+       recent-boost-prefix "{!boost b=recip(sub(${now},ms(release_date),3.16e-11,1,1)}"
+       neg-q (format "-db_id:(%s %s)" this-id watched-ids-str)]
+   (solr.query/query
+    client-config
+    {:defType "lucene"
+     :q (format "%s (%s) (%s) (%s)" recent-boost-prefix mlt-q watched-q search-logs-q)
+     :mm 10
+     :fq neg-q
+     :fl ["db_id" "title" "release_date" "score"]   ; Results: Fields
+     :rows 15})))
+
+
+#_(solr.query/query
+ client-config
+ {:defType "edismax"
+  :q "_text_:speed _text_:car"
+  #_(format "_text_:speed _text_:car \"{!mlt mintf=1 mindf=3 mlt.fl=overview}%s\""
+             (:db_id bond-spectre-movie)
+             #_"{!lucene q.op=AND df=_text_}star wars car fast furious")
+  :fl ["db_id" "title" "score"]   ; Results: Fields
+  :rows 10
+  ;;:rq "{!rerank reRankQuery=$rrq reRankDocs=100 reRankWeight=1}"
+  ;;:rrq "(star wars car fast furious)"
+  })
 
 
 
@@ -400,17 +378,28 @@
                "if(gt(popularity,50),1,0)^10"]
        :rq    "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=1 efi.age=20 efi.occupation=1}"}))
 
-
 ;;; Now let's try with other user profile.
 
 #_(return-fields
-    [:title :score :release_date]
-    (query-mlt-custom
-      {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
-       :now   (inst-ms (:release_date bond-spectre-movie))
-       :bf    ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
-               "if(gt(popularity,50),1,0)^10"]
-       :rq    "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}))
+   [:db_id :title :score :release_date]
+   (query-mlt-custom
+    {:now (inst-ms (:release_date bond-spectre-movie))
+     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date),3.16e-11,1,1)}"
+     :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
+     :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
+     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
+          "if(gt(popularity,50),1,0)^10"]
+     :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}))
+
+#_(return-fields
+ [:title :score :release_date]
+ (query-mlt-custom
+  {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
+   :now (inst-ms (:release_date bond-spectre-movie))
+   :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
+        "if(gt(popularity,50),1,0)^10"]
+   :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}))
+
 
 ;; Completely different results
 
@@ -418,8 +407,6 @@
 ;; an hybrid solution that is weighting content results too.
 
 ;; Now, let's build the model!
-
-
 
 
 
