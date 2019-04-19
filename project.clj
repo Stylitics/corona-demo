@@ -7,7 +7,7 @@
                  [incanter "1.9.3"]
 
                  ;; SOLR: 8.0.0:
-                 [corona "0.1.2-SNAPSHOT"]
+                 [corona "0.1.3-SNAPSHOT"]
 
                  ;; CORTEX
                  [thinktopic/cortex "0.9.22"]
