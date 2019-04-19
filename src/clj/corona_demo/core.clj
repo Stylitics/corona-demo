@@ -291,7 +291,7 @@
    [:db_id :title :score :release_date]
    (query-mlt-custom
     {:now (inst-ms (:release_date bond-spectre-movie))
-     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date),3.16e-11,1,1)}"
+     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)}"
      :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
      :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
      :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
@@ -303,7 +303,7 @@
    [:db_id :title :score :release_date]
    (query-mlt-custom
     {:now (inst-ms (:release_date bond-spectre-movie))
-     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date),3.16e-11,1,1)}"
+     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)}"
      :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
      :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
      :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
@@ -330,10 +330,10 @@
  (let [watched-ids-str (string/join " " (map :db_id user-last-watched-movies))
        bond-release-date (inst-ms (:release_date bond-spectre-movie))
        this-id (:db_id bond-spectre-movie)
-       mlt-q (str "{!mlt mintf=1,mindf=3,boost=true,qf=overview}" this-id)
+       mlt-q (str "{!mlt mintf=1 mindf=3 boost=true qf=overview}" this-id)
        watched-q (str "{!mlt mintf=1 mindf=3 qf=overview}" watched-ids-str)
        search-logs-q (string/join " " past-search-queries)
-       recent-boost-prefix "{!boost b=recip(sub(${now},ms(release_date),3.16e-11,1,1)}"
+       recent-boost-prefix "{!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)}"
        neg-q (format "-db_id:(%s %s)" this-id watched-ids-str)]
    (solr.query/query
     client-config
@@ -342,7 +342,8 @@
      :mm 10
      :fq neg-q
      :fl ["db_id" "title" "release_date" "score"]   ; Results: Fields
-     :rows 15})))
+     :rows 15
+     :now bond-release-date})))
 
 
 #_(solr.query/query
@@ -384,7 +385,7 @@
    [:db_id :title :score :release_date]
    (query-mlt-custom
     {:now (inst-ms (:release_date bond-spectre-movie))
-     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date),3.16e-11,1,1)}"
+     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)}"
      :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
      :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
      :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
