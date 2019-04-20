@@ -251,7 +251,7 @@
 
 ;;; 6.2 Run mlt query then enhance it base on user preferences and other factors
 
-;; Let's use edismax normal query, but passing interesting terms found for Spectre. 
+;; Let's use edismax normal query, but passing interesting terms found for Spectre.
 ;; For this We have a special handler called query-mlt-tv-edismax
 ;; tv stands for termVectors.
 
@@ -297,19 +297,21 @@
      :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
           "if(gt(popularity,50),1,0)^10"]}))
 
+
+
 ;; If we try with old bond:
 
 #_(return-fields
    [:db_id :title :score :release_date]
    (query-mlt-custom
-    {:now (inst-ms (:release_date bond-spectre-movie))
-     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)}"
-     :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
+    {:now (inst-ms (:release_date bond-never-movie))
+     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
+     :mlt.q (str "db_id:" (:db_id bond-never-movie))
      :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
      :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
-          "if(gt(popularity,50),1,0)^10"]}))
+          "if(gt(popularity,50),1,0)^1"]}))
 
-;; Older Bonds come up.
+;; FIXME: Need to find other strategy (date range?) because older Bonds should come up more^
 
 ;; But say you are new on the site and we don't have your movie history, etc. Can we guess what you would like?
 
@@ -346,21 +348,6 @@
      :now bond-release-date})))
 
 
-#_(solr.query/query
- client-config
- {:defType "edismax"
-  :q "_text_:speed _text_:car"
-  #_(format "_text_:speed _text_:car \"{!mlt mintf=1 mindf=3 mlt.fl=overview}%s\""
-             (:db_id bond-spectre-movie)
-             #_"{!lucene q.op=AND df=_text_}star wars car fast furious")
-  :fl ["db_id" "title" "score"]   ; Results: Fields
-  :rows 10
-  ;;:rq "{!rerank reRankQuery=$rrq reRankDocs=100 reRankWeight=1}"
-  ;;:rrq "(star wars car fast furious)"
-  })
-
-
-
 
 
 ;;; 6.3 Run query but re-rank top 100 results using collaborative filtering.
@@ -373,7 +360,8 @@
 #_(return-fields
     [:title :score :release_date]
     (query-mlt-custom
-      {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
+     {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
+      :mlt.qf [["genres" 10] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
        :now   (inst-ms (:release_date bond-spectre-movie))
        :bf    ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
                "if(gt(popularity,50),1,0)^10"]
@@ -382,32 +370,30 @@
 ;;; Now let's try with other user profile.
 
 #_(return-fields
+   [:title :score :release_date]
+   (query-mlt-custom
+    {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
+     :mlt.qf [["genres" 10] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
+     :now (inst-ms (:release_date bond-spectre-movie))
+     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
+          "if(gt(popularity,50),1,0)^10"]
+     :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}))
+
+;; Completely different results
+
+;; Other version
+
+#_(return-fields
    [:db_id :title :score :release_date]
    (query-mlt-custom
     {:now (inst-ms (:release_date bond-spectre-movie))
      :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)}"
      :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
-     :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
+
      :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
           "if(gt(popularity,50),1,0)^10"]
      :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}))
 
-#_(return-fields
- [:title :score :release_date]
- (query-mlt-custom
-  {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
-   :now (inst-ms (:release_date bond-spectre-movie))
-   :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
-        "if(gt(popularity,50),1,0)^10"]
-   :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}))
-
-
-;; Completely different results
-
-;; NOTE: we could be still taking into account actual first rank to get
-;; an hybrid solution that is weighting content results too.
-
-;; Now, let's build the model!
 
 
 
