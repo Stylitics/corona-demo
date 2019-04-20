@@ -90,7 +90,7 @@
          (map (fn [{:keys [userId movieId] :as rating}]
                 (-> rating
                     (assoc :user  (first (filter #(= (:userId %) userId) users)))
-                    (assoc :movie (first (filter #(= (first (:movie_lens_id %)) movieId) mov-feats)))))) ; #(:movie_lens_id %)
+                    (assoc :movie (first (filter #(= (first (:movie_lens_id %)) movieId) mov-feats))))))
          (remove (comp nil? :user))
          (remove (comp nil? :movie))
          (map (fn [{:keys [userId rating user movie]}]
