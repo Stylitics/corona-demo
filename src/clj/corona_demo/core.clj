@@ -7,12 +7,12 @@
     [corona-demo.ml.cortex :as cortex]
     [corona-demo.ml.mxnet :as mxnet]
     [corona-demo.utils :as utils]
+    [corona.cmd :as solr.cmd]
     [corona.core-admin :as solr.core]
     [corona.index :as solr.index]
     [corona.ltr :as solr.ltr]
     [corona.query :as solr.query]
     [corona.schema :as solr.schema]
-
     [incanter.core :as icore]
     [incanter.charts :as icharts]))
 
@@ -43,7 +43,10 @@
 
 (def core-dir (str (System/getProperty "user.dir") "/resources/solr/tmdb"))
 (def data-dir (str core-dir "/data/"))
-(def client-config {:core :tmdb})
+(def client-config {:core :tmdb :port 8984})
+
+#_(solr.cmd/exec! :stop "-p" "8984")
+#_(solr.cmd/exec! :start "-p" "8984")
 
 (defn core-reset!
   []
@@ -83,7 +86,6 @@
 #_(add-schema-types!)
 
 
-
 ;;; 4. Add Solr Schema Fields
 
 (defn get-fields []
@@ -104,7 +106,7 @@
 
 (def schema-fields (concat data/basic-fields data/content-fields data/number-fields))
 
-;; if you just pulled this demo, all fields are already in manageschema
+;; if you just changed schema-fields value in data ns, you can run the following. This will update, all fields are already in manageschema
 ;; thus, and no action is required.
 #_(add-schema-fields! [{}])
 #_(replace-schema-fields! schema-fields)
@@ -205,7 +207,7 @@
    :mlt.mindf "3"                                           ;min Document Frequency below which terms are ignored
    :mlt.minwl "3"                                           ;min Word Length
    :mlt.boost "true"                                        ;interesting terms tf-idf score as boost
-   :mlt.qf    [["genres" 10] ["overview" 6] ["title" 3] ["keywords" 1]] ;boost
+   :mlt.qf    [["genres" 10] ["overview" 6] ["title" 3] ["tagline" 3] ["keywords" 1]] ;boost
    :fl        ["db_id" "title" "release_date" "score"]})
 
 
@@ -251,73 +253,10 @@
 
 ;;; 6.2 Run mlt query then enhance it base on user preferences and other factors
 
-;; Let's use edismax normal query, but passing interesting terms found for Spectre.
-;; For this We have a special handler called query-mlt-tv-edismax
-;; tv stands for termVectors.
-
-(defonce ratings (data/read-ratings))
-
-(defn prefered-recent-movies-query
-  [user-id]
-  (->> ratings
-       (filter #(= (:userId %) user-id))
-       (filter #(> (:rating %) 4.0))
-       (map (fn [r] (update r :timestamp #(Integer. %))))
-       (sort-by :timestamp >)
-       (take 5)
-       (mapv :movieId)))
-
-#_(prefered-recent-movies-query 23)
-
-(defn custom-interesting-terms
-  [actual-movie-id user-id mlt-fl]
-  (let [pref-ids (prefered-recent-movies-query user-id)
-        pref-ids-str (string/join " db_id:" pref-ids)]
-    (solr.query/query-term-vectors
-      client-config
-      {:q         (format "db_id:%s db_id:%s" actual-movie-id pref-ids-str)
-       :mlt.minwl "3"
-       :fl        mlt-fl})))
-
-(defn query-mlt-custom
-  [settings]
-  (solr.query/query-mlt-tv-edismax
-   client-config
-   (merge default-mlt-settings settings)))
-
-;; That's good, it picks up most recent Bonds as well as other similar movie.
-
-#_(return-fields
-   [:db_id :title :score :release_date]
-   (query-mlt-custom
-    {:now (inst-ms (:release_date bond-spectre-movie))
-     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)}"
-     :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
-     :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
-     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
-          "if(gt(popularity,50),1,0)^10"]}))
-
-
-
-;; If we try with old bond:
-
-#_(return-fields
-   [:db_id :title :score :release_date]
-   (query-mlt-custom
-    {:now (inst-ms (:release_date bond-never-movie))
-     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
-     :mlt.q (str "db_id:" (:db_id bond-never-movie))
-     :mlt.qf [["genres" 5] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
-     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
-          "if(gt(popularity,50),1,0)^1"]}))
-
-;; FIXME: Need to find other strategy (date range?) because older Bonds should come up more^
-
-;; But say you are new on the site and we don't have your movie history, etc. Can we guess what you would like?
-
 ;; Let's imagine we have a User past searches,
 ;; last watched movies,
 ;; and wants more like Spectre Movie.
+
 
 (def past-search-queries ["star wars" "car" "fast car race"])
 
@@ -326,26 +265,35 @@
    {:title "Hidden Away", :db_id "258755"}
    {:title "Need for Speed", :db_id "136797"}])
 
+;; Let's use edismax normal query, but passing interesting terms found for Spectre.
+;; For this We have a special handler called query-mlt-tv-edismax
+;; tv stands for termVectors.
 
 #_(return-fields
- [:title :score :release_date]
- (let [watched-ids-str (string/join " " (map :db_id user-last-watched-movies))
-       bond-release-date (inst-ms (:release_date bond-spectre-movie))
-       this-id (:db_id bond-spectre-movie)
-       mlt-q (str "{!mlt mintf=1 mindf=3 boost=true qf=overview}" this-id)
-       watched-q (str "{!mlt mintf=1 mindf=3 qf=overview}" watched-ids-str)
-       search-logs-q (string/join " " past-search-queries)
-       recent-boost-prefix "{!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)}"
-       neg-q (format "-db_id:(%s %s)" this-id watched-ids-str)]
-   (solr.query/query
-    client-config
-    {:defType "lucene"
-     :q (format "%s (%s) (%s) (%s)" recent-boost-prefix mlt-q watched-q search-logs-q)
-     :mm 10
-     :fq neg-q
-     :fl ["db_id" "title" "release_date" "score"]   ; Results: Fields
-     :rows 15
-     :now bond-release-date})))
+   [:title :score :release_date]
+   (let [settings {:defType "edismax"
+                   :q (str "{!cache=false} "
+                            (string/join " " (map #(str "_text_:" %)
+                                                  past-search-queries)))
+                   :now (inst-ms (:release_date bond-spectre-movie))
+                   :bf "recip(ms(NOW,release_date),3.16e-11,1,1)^50"
+                   :fl ["title" "score" "release_date"]
+                   :mlt.fl ["overview" "genres" "title" "keywords"
+                            "production_companies" "production_countries"
+                            "spoken_languages" "director" "score"]
+                   :mlt.field "db_id"
+                   :mlt.ids (into [[(:db_id bond-spectre-movie) 1]]
+                                  (map (juxt :db_id (constantly 1))
+                                       user-last-watched-movies))
+                   :mlt.top 15
+                   :mlt.boost true
+                   :mlt.mintf 1
+                   :mlt.mindf 3
+                   :mlt.minwl 3
+                   :mlt.qf [["genres" 10] ["overview" 6] ["title" 3] ["tagline" 3] ["keywords" 1]]}]
+     (solr.query/query-mlt-tv-edismax client-config settings)))
+
+
 
 
 
@@ -358,41 +306,53 @@
 ;; resources/solr/tmdb/conf/_schema_model-store.json
 
 #_(return-fields
-    [:title :score :release_date]
-    (query-mlt-custom
-     {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
-      :mlt.qf [["genres" 10] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
-       :now   (inst-ms (:release_date bond-spectre-movie))
-       :bf    ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
-               "if(gt(popularity,50),1,0)^10"]
-       :rq    "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=1 efi.age=20 efi.occupation=1}"}))
+   [:title :score :release_date]
+   (let [settings {:defType "edismax"
+                   :q (str "{!cache=false} "
+                            (string/join " " (map #(str "_text_:" %)
+                                                  past-search-queries)))
+                   :now (inst-ms (:release_date bond-spectre-movie))
+                   :bf "recip(ms(NOW,release_date),3.16e-11,1,1)^50"
+                   :fl ["title" "score" "release_date"]
+                   :mlt.field "db_id"
+                   :mlt.ids (into [[(:db_id bond-spectre-movie) 1]]
+                                  (map (juxt :db_id (constantly 1))
+                                       user-last-watched-movies))
+                   :mlt.top 15
+                   :mlt.boost true
+                   :mlt.mintf 1
+                   :mlt.mindf 3
+                   :mlt.minwl 3
+                   :mlt.qf [["genres" 10] ["overview" 6] ["title" 3] ["tagline" 3] ["keywords" 1]]
+                   :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=1 efi.age=20 efi.occupation=1}"}]
+     (solr.query/query-mlt-tv-edismax client-config settings)))
+
+
 
 ;;; Now let's try with other user profile.
 
 #_(return-fields
    [:title :score :release_date]
-   (query-mlt-custom
-    {:mlt.q (str "db_id:" (:db_id bond-spectre-movie))
-     :mlt.qf [["genres" 10] ["overview" 6] ["title" 3] ["tagline" 1] ["keywords" 1]]
-     :now (inst-ms (:release_date bond-spectre-movie))
-     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)^2"
-          "if(gt(popularity,50),1,0)^10"]
-     :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}))
+   (let [settings {:defType "edismax"
+                   :q (str "{!cache=false} "
+                            (string/join " " (map #(str "_text_:" %)
+                                                  past-search-queries)))
+                   :now (inst-ms (:release_date bond-spectre-movie))
+                   :bf "recip(ms(NOW,release_date),3.16e-11,1,1)^50"
+                   :fl ["title" "score" "release_date"]
+                   :mlt.field "db_id"
+                   :mlt.ids (into [[(:db_id bond-spectre-movie) 1]]
+                                  (map (juxt :db_id (constantly 1))
+                                       user-last-watched-movies))
+                   :mlt.top 15
+                   :mlt.boost true
+                   :mlt.mintf 1
+                   :mlt.mindf 3
+                   :mlt.minwl 3
+                   :mlt.qf [["genres" 10] ["overview" 6] ["title" 3] ["tagline" 3] ["keywords" 1]]
+                   :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}]
+     (solr.query/query-mlt-tv-edismax client-config settings)))
 
-;; Completely different results
-
-;; Other version
-
-#_(return-fields
-   [:db_id :title :score :release_date]
-   (query-mlt-custom
-    {:now (inst-ms (:release_date bond-spectre-movie))
-     :q "{!cache=false} {!boost b=recip(sub(${now},ms(release_date)),3.16e-11,1,1)}"
-     :mlt.q (str "db_id:" (:db_id bond-spectre-movie))
-
-     :bf ["recip(sub(${now},ms(release_date)),3.16e-11,1,1)"
-          "if(gt(popularity,50),1,0)^10"]
-     :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}))
 
 
 

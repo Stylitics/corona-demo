@@ -68,7 +68,7 @@
   <field name="keywords" type="text_en_splitting" termVectors="true" multiValued="true" indexed="true" stored="true"/>
   <field name="movie_lens_id" type="plongs" indexed="true" stored="true"/>
   <field name="original_language" type="text_lowcased" termVectors="true" indexed="true" stored="true"/>
-  <field name="original_title" type="text_lowcased" termVectors="true" indexed="true" stored="true"/>
+  <field name="original_title" type="text_en_splitting" termVectors="true" indexed="true" stored="true"/>
   <field name="overview" type="text_en_splitting" termVectors="true" indexed="true" stored="true"/>
   <field name="popularity" type="pfloat" indexed="true" stored="true"/>
   <field name="producers" type="text_lowcased" termVectors="true" multiValued="true" indexed="true" stored="true"/>
@@ -80,7 +80,7 @@
   <field name="spoken_languages" type="text_lowcased" termVectors="true" multiValued="true" indexed="true" stored="true"/>
   <field name="status" type="text_lowcased" termVectors="true" indexed="true" stored="true"/>
   <field name="tagline" type="text_en_splitting" termVectors="true" indexed="true" stored="true"/>
-  <field name="title" type="text_lowcased" termVectors="true" indexed="true" stored="true"/>
+  <field name="title" type="text_en_splitting" termVectors="true" indexed="true" stored="true"/>
   <field name="vote_average" type="pfloat" indexed="true" stored="true"/>
   <field name="vote_count" type="plongs"/>
   <copyField source="cast" dest="_text_"/>

@@ -229,7 +229,7 @@
     :termVectors true}
 
    {:name "title",
-    :type "text_lowcased",
+    :type "text_en_splitting",
     :indexed true,
     :stored true
     :termVectors true}
@@ -242,7 +242,7 @@
     :termVectors true}
 
    {:name "original_title",
-    :type "text_lowcased",
+    :type "text_en_splitting",
     :indexed true,
     :stored true
     :termVectors true}
