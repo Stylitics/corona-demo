@@ -43,30 +43,63 @@
 
 (def core-dir (str (System/getProperty "user.dir") "/resources/solr/tmdb"))
 (def data-dir (str core-dir "/data/"))
-(def client-config {:core :tmdb :port 8984})
+(def client-config {:core :tmdb :port 8983})
 
-#_(solr.cmd/exec! :stop "-p" "8984")
-#_(solr.cmd/exec! :start "-p" "8984")
+;;You must have solr server started to go further.
+;; you can either do it in the command line, with
+;; $SOLR_HOME/bin/solr start -p 8983
+#_(solr.cmd/exec! :start "-p" "8983")
+
+;; Sometimes you will need to stop it. (and start again)
+;; in that case run:
+;; $SOLR_HOME/bin/solr stop -p 8983
+;; or
+#_(solr.cmd/exec! :stop "-p" "8983")
+
+(defn core-reload!
+  []
+  (println "SOLR: Trying reloading existing :tmdb core...")
+  ;; same as $SOLR_HOME/bin/solr delete -c tmdb
+  (solr.core/reload! client-config)
+  (if (solr.core/status-details client-config)
+    (println "SOLR: Core loaded and ready! :-)")
+    (println "SOLR: No core found, you'll need to create a new core running core-reset!)")))
 
 (defn core-reset!
   []
-  (println "SOLR: Deleting :tmdb core...")
+  (println "SOLR: Trying reloading existing :tmdb core...")
   ;; same as $SOLR_HOME/bin/solr delete -c tmdb
-  (solr.core/delete! client-config {:deleteIndex true})
+  (when (solr.core/status-details client-config)
+    (solr.core/unload! client-config))
+  (println "SOLR: Creating :tmdb core...")
+  (solr.core/create! client-config {:instanceDir core-dir
+                                    :property.loadOnStartup true})
+  ;; retry...
+  (when-not (solr.core/status-details client-config)
+    (solr.core/create! client-config {:instanceDir core-dir}))
+  (println "SOLR: Clearing :items index...")
+  (solr.index/clear! client-config)
+  (when (solr.core/status-details client-config)
+    (println "SOLR: Ready to import documents :-)")))
 
-  (println "SOLR: Creating back :tmdb core...")
-  ;; same as $SOLR_HOME/bin/solr create -c tmdb -d conf-dir
-  (solr.core/create! client-config {:instanceDir core-dir})
 
-  (println "SOLR: Ready to add and index documents :-)"))
+;; You can use existing core and index by reloading it:
+#_(core-reload!)
 
+;; If you cannot find an existing core, changed your schemas or configuration,
+;; or simply want to reset index, just run the following:
 #_(core-reset!)
 
 
 
-#_(first data/movies)
+
+
+
 
 ;;; 3. Add Solr Schema Types
+
+;; inspect a document:
+#_(first data/movies)
 
 (def custom-schema data/schema-type-text_en_splitting)
 
@@ -81,9 +114,15 @@
   (solr.schema/add-field-type! client-config custom-schema))
 
 
-;; if you just pulled this demo, all field types are already in manageschema
+;; If you just pulled this demo, all field types are already in manageschema
 ;; thus, and no action is required.
+
+;; If you need to add new schema types, you could use the fn above,
+;; then run the following:
 #_(add-schema-types!)
+
+
+
 
 
 ;;; 4. Add Solr Schema Fields
@@ -106,8 +145,11 @@
 
 (def schema-fields (concat data/basic-fields data/content-fields data/number-fields))
 
-;; if you just changed schema-fields value in data ns, you can run the following. This will update, all fields are already in manageschema
+;; If you just pulled this demo, all field types are already in manageschema
 ;; thus, and no action is required.
+
+;; If you need to add new fields in schema, or replace existing ones, you could
+;; use the fn above, then run the one of the following:
 #_(add-schema-fields! [{}])
 #_(replace-schema-fields! schema-fields)
 #_(doseq [n (map :name data/content-fields)]
@@ -131,6 +173,8 @@
            "http://localhost:8983/solr/tmdb/query?q=*:*&fl=db_id,title,overview,genres,cast")
   )
 
+;; If you had to reset your core, or had changed your schemas or configuration,
+;; or simply need to reset index, just run the following:
 #_(core-index-all!)
 
 
@@ -266,17 +310,19 @@
    {:title "Need for Speed", :db_id "136797"}])
 
 ;; Let's use edismax normal query, but passing interesting terms found for Spectre.
-;; For this We have a special handler called query-mlt-tv-edismax
+;; For this We have a special handler called query-mlt-tv-edismax that has a special
+;; var ${mltq} that is a query of all interesting terms found
 ;; tv stands for termVectors.
 
 #_(return-fields
    [:title :score :release_date]
    (let [settings {:defType "edismax"
-                   :q (str "{!cache=false} "
-                            (string/join " " (map #(str "_text_:" %)
-                                                  past-search-queries)))
                    :now (inst-ms (:release_date bond-spectre-movie))
-                   :bf "recip(ms(NOW,release_date),3.16e-11,1,1)^50"
+                   :q (str "{!cache=false} "
+                            #_(string/join " " (map #(str "_text_:" %)
+                                                  past-search-queries))
+                            "{!boost b=recip(ms(NOW,release_date),3.16e-11,1,1) v=\"{!lucene v='(${mltq})\"}'}")
+                   ;;:bf "recip(ms(NOW,release_date),3.16e-11,1,1)^50"
                    :fl ["title" "score" "release_date"]
                    :mlt.fl ["overview" "genres" "title" "keywords"
                             "production_companies" "production_countries"
@@ -308,12 +354,16 @@
 #_(return-fields
    [:title :score :release_date]
    (let [settings {:defType "edismax"
-                   :q (str "{!cache=false} "
-                            (string/join " " (map #(str "_text_:" %)
-                                                  past-search-queries)))
                    :now (inst-ms (:release_date bond-spectre-movie))
-                   :bf "recip(ms(NOW,release_date),3.16e-11,1,1)^50"
+                   :q (str "{!cache=false} "
+                            #_(string/join " " (map #(str "_text_:" %)
+                                                  past-search-queries))
+                            "{!boost b=recip(ms(NOW,release_date),3.16e-11,1,1) v=\"{!lucene v='(${mltq})\"}'}")
+                   ;;:bf "recip(ms(NOW,release_date),3.16e-11,1,1)^50"
                    :fl ["title" "score" "release_date"]
+                   :mlt.fl ["overview" "genres" "title" "keywords"
+                            "production_companies" "production_countries"
+                            "spoken_languages" "director" "score"]
                    :mlt.field "db_id"
                    :mlt.ids (into [[(:db_id bond-spectre-movie) 1]]
                                   (map (juxt :db_id (constantly 1))
@@ -327,19 +377,21 @@
                    :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=1 efi.age=20 efi.occupation=1}"}]
      (solr.query/query-mlt-tv-edismax client-config settings)))
 
-
-
 ;;; Now let's try with other user profile.
 
 #_(return-fields
    [:title :score :release_date]
    (let [settings {:defType "edismax"
-                   :q (str "{!cache=false} "
-                            (string/join " " (map #(str "_text_:" %)
-                                                  past-search-queries)))
                    :now (inst-ms (:release_date bond-spectre-movie))
-                   :bf "recip(ms(NOW,release_date),3.16e-11,1,1)^50"
+                   :q (str "{!cache=false} "
+                            #_(string/join " " (map #(str "_text_:" %)
+                                                  past-search-queries))
+                            "{!boost b=recip(ms(NOW,release_date),3.16e-11,1,1) v=\"{!lucene v='(${mltq})\"}'}")
+                   ;;:bf "recip(ms(NOW,release_date),3.16e-11,1,1)^50"
                    :fl ["title" "score" "release_date"]
+                   :mlt.fl ["overview" "genres" "title" "keywords"
+                            "production_companies" "production_countries"
+                            "spoken_languages" "director" "score"]
                    :mlt.field "db_id"
                    :mlt.ids (into [[(:db_id bond-spectre-movie) 1]]
                                   (map (juxt :db_id (constantly 1))
@@ -353,6 +405,9 @@
                    :rq "{!ltr model=ltrGoaModel reRankDocs=40 efi.gender=0 efi.age=60 efi.occupation=7}"}]
      (solr.query/query-mlt-tv-edismax client-config settings)))
 
+;; You can cleary see the results are different. This is due the the ML model that was apply with two different user profile at :rq key.
+
+;; In the next steps, we will learn how to create such a model.
 
 
 
@@ -447,6 +502,7 @@
   #_(-> splitted-ds :test count)
   #_(cortex/compare-results trained-net (:test splitted-ds) 100)
   )
+
 
 
 
